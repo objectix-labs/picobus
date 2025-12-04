@@ -12,5 +12,6 @@
     "fmt",
     "--stdin"
     ],
-    "terminal.integrated.defaultProfile.linux": "bash"
+    "terminal.integrated.defaultProfile.linux": "bash",
+    "terminal.integrated.detectLocale": "off"
 }
