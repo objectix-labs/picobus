@@ -1,7 +1,9 @@
 package main
 
-import "fmt"
+import "github.com/objectix-labs/picobus/internal/logging"
 
 func main() {
-	fmt.Println("picobus started")
+	logging.Init()
+	logging.Info("picobus started")
+	logging.Debug("this is a debug message")
 }
