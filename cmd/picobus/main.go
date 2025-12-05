@@ -2,29 +2,19 @@ package main
 
 import (
 	"net"
-	"os"
 	"strings"
 
 	"github.com/objectix-labs/picobus/internal/logging"
 	"github.com/objectix-labs/picobus/internal/socket"
+	"github.com/spf13/viper"
 )
 
 func main() {
-	level := strings.ToLower(os.Getenv("PICOBUS_LOG_LEVEL"))
-	format := strings.ToLower(os.Getenv("PICOBUS_LOG_FORMAT"))
-	socketPath := os.Getenv("PICOBUS_SOCKET_PATH")
+	setupConfiguration()
 
-	if socketPath == "" {
-		socketPath = "/tmp/picobus.sock"
-	}
-
-	if level == "" {
-		level = "info"
-	}
-
-	if format == "" {
-		format = "text"
-	}
+	level := strings.ToLower(viper.GetString("log_level"))
+	format := strings.ToLower(viper.GetString("log_format"))
+	socketPath := viper.GetString("socket")
 
 	logging.Init("picobus", level, format)
 	logging.Info("picobus started")
@@ -39,4 +29,19 @@ func main() {
 	if err := serverSocket.ListenAndServe(); err != nil {
 		logging.Error("listen and serve failed", "error", err)
 	}
+}
+
+func setupConfiguration() {
+	defaults := map[string]string{
+		"log_level":  "info",
+		"log_format": "text",
+		"socket":     "/tmp/picobus.sock",
+	}
+
+	for key, value := range defaults {
+		viper.SetDefault(key, value)
+	}
+
+	viper.SetEnvPrefix("pico")
+	viper.AutomaticEnv()
 }

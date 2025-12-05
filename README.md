@@ -3,6 +3,6 @@ A very lightweight message bus system for service-centric device architectures w
 
 
 ## Broker Config
-* PICOBUS_LOG_LEVEL ("trace", "debug", "info", "warn", "error")
-* PICOBUS_LOG_FORMAT: ("json", "text")
-* PICOBUS_SOCKET: path to socket file for picobus broker
+* PICO_LOG_LEVEL ("trace", "debug", "info", "warn", "error")
+* PICO_LOG_FORMAT: ("json", "text")
+* PICO_SOCKET: path to socket file for picobus broker
