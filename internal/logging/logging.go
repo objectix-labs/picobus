@@ -12,7 +12,7 @@ import (
 // - PICOBUS_LOG_FORMAT: json or text
 
 // Init configures the package-global slog logger.
-func Init() {
+func Init(serviceName string) {
 	level := strings.ToLower(os.Getenv("PICOBUS_LOG_LEVEL"))
 	format := strings.ToLower(os.Getenv("PICOBUS_LOG_FORMAT"))
 
@@ -41,7 +41,7 @@ func Init() {
 		panic("unknown log format: " + format)
 	}
 
-	slog.SetDefault(slog.New(handler))
+	slog.SetDefault(slog.New(handler).With("service", serviceName))
 }
 
 // Logger returns the package-global logger.
