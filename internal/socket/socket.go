@@ -1,9 +1,15 @@
 package socket
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net"
 	"os"
+	"sync"
+	"time"
+
+	"github.com/objectix-labs/picobus/internal/logging"
 )
 
 // PicobusSocket wraps access to a Unix domain socket
@@ -11,17 +17,24 @@ import (
 // are then handled with the specified handler function.
 
 type PicobusSocket struct {
-	path     string
-	handler  PicobusSocketHandler
-	listener net.Listener
+	path      string
+	handler   PicobusSocketHandler
+	listener  net.Listener
+	waitGroup sync.WaitGroup
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
-type PicobusSocketHandler func(conn net.Conn)
+type PicobusSocketHandler func(ctx context.Context, conn net.Conn, wg *sync.WaitGroup)
 
 func NewPicobusSocket(path string, handler PicobusSocketHandler) *PicobusSocket {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &PicobusSocket{
 		path:    path,
 		handler: handler,
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 }
 
@@ -45,21 +58,51 @@ func (s *PicobusSocket) ListenAndServe() error {
 
 	for {
 		conn, err := listener.Accept()
-		if err == net.ErrClosed {
-			return nil
-		} else if err != nil {
-			return fmt.Errorf("failed to accept connection: %w", err)
+		if err != nil {
+			select {
+			case <-s.ctx.Done():
+				// listener closed during shutdown
+				return nil
+			default:
+				log.Println("accept error:", err)
+				continue
+			}
 		}
 
-		go s.handler(conn)
+		// We need to invoke connecton handler in new goroutine
+		s.waitGroup.Add(1)
+		go s.handler(s.ctx, conn, &s.waitGroup)
 	}
 }
 
 func (s *PicobusSocket) Close() error {
+	// Cancel our context to signal handlers to stop and
+	s.cancel()
+
+	// Stop accepting new connections
 	err := s.listener.Close()
 	if err != nil {
 		return fmt.Errorf("failed to close socket listener: %w", err)
 	}
+
+	// Wait for all active connections to finish, but do not linger more than 10 seconds
+	done := make(chan struct{})
+
+	go func() {
+		s.waitGroup.Wait()
+		close(done)
+	}()
+
+	// wait for either all handlers to finish or timeout
+	select {
+	case <-done:
+		// all handlers finished
+		logging.Info("all active socket handlers finished")
+	case <-time.After(gracefulShutdownTimeout):
+		// timeout reached
+		logging.Warn("timeout waiting for socket handlers to finish")
+	}
+
 	return nil
 }
 
@@ -69,3 +112,5 @@ func unlink(path string) error {
 	}
 	return nil
 }
+
+const gracefulShutdownTimeout = 10 * time.Second
