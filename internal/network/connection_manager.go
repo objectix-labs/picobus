@@ -9,14 +9,14 @@ import (
 
 type ConnectionManager struct {
 	serverSocket           *PicobusSocket
-	protocolMessageFactory *protocol.MessageFactory
+	protocolMessageFactory *protocol.MessageCodec
 
 	connectionMap sync.Map // map[string]*Connection
 }
 
 func NewConnectionManager(
 	serverSocket *PicobusSocket,
-	protocolMessageFactory *protocol.MessageFactory,
+	protocolMessageFactory *protocol.MessageCodec,
 ) *ConnectionManager {
 	return &ConnectionManager{
 		serverSocket:           serverSocket,

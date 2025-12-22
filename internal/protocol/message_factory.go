@@ -4,25 +4,16 @@ type Message interface {
 	Bytes() []byte
 }
 
-type SimpleProtocolMessage struct {
-	data []byte
+type MessageCodec struct{}
+
+func NewMessageCodec() *MessageCodec {
+	return &MessageCodec{}
 }
 
-func (m *SimpleProtocolMessage) Bytes() []byte {
-	return m.data
-}
-
-type MessageFactory struct{}
-
-func NewMessageFactory() *MessageFactory {
-	return &MessageFactory{}
-}
-
-func (f *MessageFactory) CreateMessage(data []byte) Message {
-	return NewMessageFromBytes(data)
-}
-
-func NewMessageFromBytes(data []byte) Message {
-	// For demonstration purposes, we return a simple implementation
+func (f *MessageCodec) Decode(data []byte) Message {
 	return &SimpleProtocolMessage{data: data}
+}
+
+func (f *MessageCodec) Encode(msg Message) []byte {
+	return msg.Bytes()
 }

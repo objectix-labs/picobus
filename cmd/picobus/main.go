@@ -32,7 +32,7 @@ func main() {
 
 	endpoint := network.NewConnectionManager(
 		serverSocket,
-		protocol.NewMessageFactory(),
+		protocol.NewMessageCodec(),
 	)
 
 	endpoint.Start()
