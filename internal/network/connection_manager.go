@@ -62,7 +62,9 @@ func (e *ConnectionManager) Write(connID string, msg protocol.Message) error {
 		return fmt.Errorf("invalid connection type for ID %s", connID)
 	}
 
-	return connection.Write(msg.Bytes())
+	// Encode message and write it to connection
+	msgBytes := e.protocolMessageFactory.Encode(msg)
+	return connection.Write(msgBytes)
 }
 
 func (e *ConnectionManager) handleConnections() {
