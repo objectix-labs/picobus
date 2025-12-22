@@ -17,27 +17,25 @@ import (
 
 type PicobusSocket struct {
 	path      string
-	connQueue chan *Connection
 	listener  net.Listener
 	waitGroup sync.WaitGroup
 	ctx       context.Context
 	cancel    context.CancelFunc
 }
 
-func NewPicobusSocket(path string, connQueue chan *Connection) *PicobusSocket {
+func NewPicobusSocket(path string) *PicobusSocket {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &PicobusSocket{
-		path:      path,
-		connQueue: connQueue,
-		ctx:       ctx,
-		cancel:    cancel,
+		path:   path,
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
 // ListenAndServe starts listening on the Unix domain socket
 // and serves incoming connections using the specified handler.
-func (s *PicobusSocket) ListenAndServe() error {
+func (s *PicobusSocket) ListenAndServe(connQueue chan *Connection) error {
 	// Unbind any existing socket file
 	unlink(s.path)
 
@@ -67,15 +65,11 @@ func (s *PicobusSocket) ListenAndServe() error {
 		}
 
 		connection := NewConnection(s.ctx, conn, &s.waitGroup, defaultMaxMessageSize)
-		s.connQueue <- connection
+		connQueue <- connection
 	}
 }
 
-func (s *PicobusSocket) ConnectionQueue() chan *Connection {
-	return s.connQueue
-}
-
-func (s *PicobusSocket) Close() error {
+func (s *PicobusSocket) Close(gracefulTimeout time.Duration) error {
 	// Cancel our context to signal handlers to stop and
 	s.cancel()
 
@@ -98,7 +92,7 @@ func (s *PicobusSocket) Close() error {
 	case <-done:
 		// all handlers finished
 		logging.Info("all active socket handlers finished")
-	case <-time.After(gracefulShutdownTimeout):
+	case <-time.After(gracefulTimeout):
 		// timeout reached
 		logging.Warn("timeout waiting for socket handlers to finish")
 	}
@@ -113,5 +107,4 @@ func unlink(path string) error {
 	return nil
 }
 
-const gracefulShutdownTimeout = 10 * time.Second
 const defaultMaxMessageSize = 1024 * 1024 // 1 MB

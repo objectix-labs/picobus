@@ -10,8 +10,8 @@ func NewMessageCodec() *MessageCodec {
 	return &MessageCodec{}
 }
 
-func (f *MessageCodec) Decode(data []byte) Message {
-	return &SimpleProtocolMessage{data: data}
+func (f *MessageCodec) Decode(data []byte) (Message, error) {
+	return &SimpleProtocolMessage{data: data}, nil
 }
 
 func (f *MessageCodec) Encode(msg Message) []byte {

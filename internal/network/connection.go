@@ -64,8 +64,8 @@ func (c *Connection) Write(msg []byte) error {
 	}
 }
 
-// Inbound returns the channel for receiving inbound messages from the connection.
-func (c *Connection) Inbound() chan []byte {
+// Messages returns the channel for receiving inbound messages from the connection.
+func (c *Connection) Messages() chan []byte {
 	return c.readQueue
 }
 
