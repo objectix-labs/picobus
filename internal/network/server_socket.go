@@ -1,9 +1,8 @@
-package socket
+package network
 
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"sync"
@@ -18,16 +17,14 @@ import (
 
 type PicobusSocket struct {
 	path      string
-	handler   PicobusSocketHandler
+	handler   *ConnectionHandler
 	listener  net.Listener
 	waitGroup sync.WaitGroup
 	ctx       context.Context
 	cancel    context.CancelFunc
 }
 
-type PicobusSocketHandler func(ctx context.Context, conn net.Conn, wg *sync.WaitGroup)
-
-func NewPicobusSocket(path string, handler PicobusSocketHandler) *PicobusSocket {
+func NewPicobusSocket(path string, handler *ConnectionHandler) *PicobusSocket {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &PicobusSocket{
@@ -64,14 +61,14 @@ func (s *PicobusSocket) ListenAndServe() error {
 				// listener closed during shutdown
 				return nil
 			default:
-				log.Println("accept error:", err)
+				logging.Warn("accept error:", err)
 				continue
 			}
 		}
 
 		// We need to invoke connecton handler in new goroutine
 		s.waitGroup.Add(1)
-		go s.handler(s.ctx, conn, &s.waitGroup)
+		go s.handler.Handle(s.ctx, conn, &s.waitGroup)
 	}
 }
 
@@ -85,7 +82,7 @@ func (s *PicobusSocket) Close() error {
 		return fmt.Errorf("failed to close socket listener: %w", err)
 	}
 
-	// Wait for all active connections to finish, but do not linger more than 10 seconds
+	// Wait for all active connections to finish, but do not linger more than X seconds
 	done := make(chan struct{})
 
 	go func() {

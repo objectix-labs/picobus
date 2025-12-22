@@ -1,17 +1,14 @@
 package main
 
 import (
-	"context"
-	"net"
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 
 	"github.com/caarlos0/env"
 	"github.com/objectix-labs/picobus/internal/logging"
-	"github.com/objectix-labs/picobus/internal/socket"
+	"github.com/objectix-labs/picobus/internal/network"
 )
 
 func main() {
@@ -22,25 +19,15 @@ func main() {
 
 	logging.Init("picobus", strings.ToLower(config.LogLevel), strings.ToLower(config.LogFormat))
 	logging.Info("picobus started")
-	logging.Debug("this is a debug message")
+
+	// setup connection handler
+	const maxMessageSize = 1024 * 1024 // 1 MB
+	connectionHandler := network.NewConnectionHandler(maxMessageSize)
 
 	// setup server socket, then wait and serve connections
-	serverSocket := socket.NewPicobusSocket(
+	serverSocket := network.NewPicobusSocket(
 		config.SocketPath,
-		func(ctx context.Context, conn net.Conn, wg *sync.WaitGroup) {
-			// When this handler is terminated, we need to release a wait group slot
-			// and close the associated connection.
-			defer wg.Done()
-			defer conn.Close()
-
-			logging.Info("accepted new connection", "remoteAddr", conn.RemoteAddr().String())
-
-			// TODO: handle connection
-
-			// Wait for shutdown signal
-			<-ctx.Done()
-			logging.Info("terminating connection handler", "remoteAddr", conn.RemoteAddr().String())
-		},
+		connectionHandler,
 	)
 
 	go func() {
