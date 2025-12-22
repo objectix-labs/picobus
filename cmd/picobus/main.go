@@ -9,6 +9,7 @@ import (
 	"github.com/caarlos0/env"
 	"github.com/objectix-labs/picobus/internal/logging"
 	"github.com/objectix-labs/picobus/internal/network"
+	"github.com/objectix-labs/picobus/internal/protocol"
 )
 
 func main() {
@@ -20,22 +21,21 @@ func main() {
 	logging.Init("picobus", strings.ToLower(config.LogLevel), strings.ToLower(config.LogFormat))
 	logging.Info("picobus started")
 
-	// setup connection handler
-	const maxMessageSize = 1024 * 1024 // 1 MB
-	connectionHandler := network.NewConnectionHandler(maxMessageSize)
+	// Connection queue gets filles when a new connection becomes available
+	connectionQueue := make(chan *network.Connection, maxPendingConnections)
 
 	// setup server socket, then wait and serve connections
 	serverSocket := network.NewPicobusSocket(
 		config.SocketPath,
-		connectionHandler,
+		connectionQueue,
 	)
 
-	go func() {
-		// Wait and listen for incoming connections to our server socket
-		if err := serverSocket.ListenAndServe(); err != nil {
-			logging.Error("listen and serve failed", "error", err)
-		}
-	}()
+	endpoint := network.NewConnectionManager(
+		serverSocket,
+		protocol.NewMessageFactory(),
+	)
+
+	endpoint.Start()
 
 	// Wait for shutdown signal
 	quit := make(chan os.Signal, 1)
@@ -44,11 +44,9 @@ func main() {
 	logging.Info("shutdown signal received")
 
 	// close server socket
-	if err := serverSocket.Close(); err != nil {
+	if err := endpoint.Terminate(); err != nil {
 		logging.Error("server shutdown failed", "error", err)
 	}
-
-	// Wait for
 
 	logging.Info("server exited properly")
 }
@@ -58,3 +56,5 @@ type config struct {
 	LogFormat  string `env:"LOG_FORMAT" envDefault:"text"`
 	SocketPath string `env:"SOCKET"     envDefault:"/tmp/picobus.sock"`
 }
+
+const maxPendingConnections = 100

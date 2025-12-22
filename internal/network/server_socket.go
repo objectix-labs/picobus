@@ -17,21 +17,21 @@ import (
 
 type PicobusSocket struct {
 	path      string
-	handler   *ConnectionHandler
+	connQueue chan *Connection
 	listener  net.Listener
 	waitGroup sync.WaitGroup
 	ctx       context.Context
 	cancel    context.CancelFunc
 }
 
-func NewPicobusSocket(path string, handler *ConnectionHandler) *PicobusSocket {
+func NewPicobusSocket(path string, connQueue chan *Connection) *PicobusSocket {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &PicobusSocket{
-		path:    path,
-		handler: handler,
-		ctx:     ctx,
-		cancel:  cancel,
+		path:      path,
+		connQueue: connQueue,
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 }
 
@@ -66,10 +66,13 @@ func (s *PicobusSocket) ListenAndServe() error {
 			}
 		}
 
-		// We need to invoke connecton handler in new goroutine
-		s.waitGroup.Add(1)
-		go s.handler.Handle(s.ctx, conn, &s.waitGroup)
+		connection := NewConnection(s.ctx, conn, &s.waitGroup, defaultMaxMessageSize)
+		s.connQueue <- connection
 	}
+}
+
+func (s *PicobusSocket) ConnectionQueue() chan *Connection {
+	return s.connQueue
 }
 
 func (s *PicobusSocket) Close() error {
@@ -111,3 +114,4 @@ func unlink(path string) error {
 }
 
 const gracefulShutdownTimeout = 10 * time.Second
+const defaultMaxMessageSize = 1024 * 1024 // 1 MB
