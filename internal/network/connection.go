@@ -1,11 +1,15 @@
 package network
 
 import (
+	"bufio"
 	"context"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/objectix-labs/picobus/internal/logging"
@@ -21,6 +25,8 @@ type Connection struct {
 	readQueue      chan []byte
 	isClosed       atomic.Bool
 	maxMessageSize uint32
+	reader         *bufio.Reader
+	writer         *bufio.Writer
 }
 
 // NewConnection creates a new Connection instance.
@@ -41,6 +47,8 @@ func NewConnection(
 		maxMessageSize: maxMessageSize,
 		writeQueue:     make(chan []byte, maxMessages),
 		readQueue:      make(chan []byte, maxMessages),
+		reader:         bufio.NewReader(conn),
+		writer:         bufio.NewWriter(conn),
 	}
 }
 
@@ -82,13 +90,10 @@ func (c *Connection) Handle() {
 	// in the meantime.
 	go c.observeConnection()
 
-	// Attach message reader and writer to our connection
-	messageReader := NewMessageReader(c.conn, c.maxMessageSize)
-
 	// We now enter the inbound message loop for this connection.
 	for {
 		// Read next message from connection
-		msg, err := messageReader.Read()
+		msg, err := c.read()
 		if err != nil {
 			// Could not read message, leave connection handler
 			logging.Error(
@@ -125,7 +130,6 @@ func (c *Connection) Handle() {
 }
 
 func (c *Connection) observeConnection() {
-	messageWriter := NewMessageWriter(c.conn, c.maxMessageSize)
 	for {
 		select {
 		case <-c.context.Done():
@@ -135,7 +139,7 @@ func (c *Connection) observeConnection() {
 		case outMsg, ok := <-c.writeQueue:
 			if ok {
 				// Write outbound message to connection
-				err := messageWriter.Write(outMsg)
+				err := c.write(outMsg)
 				if err != nil {
 					logging.Warn(
 						"failed to write message on connection",
@@ -174,4 +178,91 @@ func (c *Connection) close() {
 	c.waitGroup.Done()
 }
 
+func (c *Connection) read() ([]byte, error) {
+	// Idle timeout while waiting for new message
+	c.conn.SetReadDeadline(time.Now().Add(maxIdleTimeout))
+
+	// Read the size of the message (first 4 bytes)
+	msgSizeBuf := make([]byte, msgSizeFieldLen)
+	if n, err := io.ReadFull(c.reader, msgSizeBuf); err != nil || n != 4 {
+		// could not read message size
+		return nil, fmt.Errorf("failed to read message size: %w", err)
+	}
+
+	// Convert from network order to host order
+	msgSize := binary.BigEndian.Uint32(msgSizeBuf)
+
+	if msgSize > c.maxMessageSize {
+		// message size exceeds maximum allowed size
+		return nil, fmt.Errorf(
+			"message size %d exceeded maximum allowed message size of %d bytes",
+			msgSize,
+			c.maxMessageSize,
+		)
+	}
+
+	// Allocate buffer for the message
+	msgBuf := make([]byte, msgSize)
+
+	// Start per message tiemeout to avoid slow senders and DOS attacks
+	c.conn.SetReadDeadline(time.Now().Add(maxMessageTimeout))
+
+	// Read the actual message payload
+	if n, err := io.ReadFull(c.reader, msgBuf); err != nil || uint32(n) != msgSize {
+		// could not read full message payload
+		return nil, fmt.Errorf("failed to read message payload: %w", err)
+	}
+
+	// Clear read deadline
+	c.conn.SetReadDeadline(time.Time{})
+
+	return msgBuf, nil
+}
+
+func (c *Connection) write(msg []byte) error {
+	if uint32(len(msg)) > c.maxMessageSize {
+		return fmt.Errorf(
+			"message size %d exceeded maximum allowed message size of %d bytes",
+			len(msg),
+			c.maxMessageSize,
+		)
+	}
+
+	// Set write deadline
+	c.conn.SetWriteDeadline(time.Now().Add(maxMessageTimeout))
+
+	// Prepare message size buffer
+	msgSizeBuf := make([]byte, msgSizeFieldLen)
+	binary.BigEndian.PutUint32(msgSizeBuf, uint32(len(msg)))
+
+	// Write message size
+	if n, err := c.writer.Write(msgSizeBuf); err != nil || n != msgSizeFieldLen {
+		return fmt.Errorf("failed to write message size: %w", err)
+	}
+
+	// Write message payload
+	if n, err := c.writer.Write(msg); err != nil || n != len(msg) {
+		return fmt.Errorf("failed to write message payload: %w", err)
+	}
+
+	if err := c.writer.Flush(); err != nil {
+		return fmt.Errorf("failed to flush message to connection: %w", err)
+	}
+
+	// Clear write deadline
+	c.conn.SetWriteDeadline(time.Time{})
+
+	return nil
+}
+
+// How long does server wait for data from idle connection before closing it?
+const maxIdleTimeout = 5 * time.Minute
+
+// How long oes the server wait for a full message to be received?
+const maxMessageTimeout = 3 * time.Second
+
+// Message size field length (in bytes).
+const msgSizeFieldLen = 4
+
+// How many messages can be queued for reading/writing per connection.
 const maxMessages = 10

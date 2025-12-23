@@ -11,11 +11,11 @@ import (
 	"github.com/objectix-labs/picobus/internal/logging"
 )
 
-// PicobusSocket wraps access to a Unix domain socket
+// ServerSocket wraps access to a Unix domain socket
 // and accepts inbound connections to that socket. Accepted connections
 // are then handled with the specified handler function.
 
-type PicobusSocket struct {
+type ServerSocket struct {
 	path      string
 	listener  net.Listener
 	waitGroup sync.WaitGroup
@@ -23,10 +23,10 @@ type PicobusSocket struct {
 	cancel    context.CancelFunc
 }
 
-func NewPicobusSocket(path string) *PicobusSocket {
+func NewPicobusSocket(path string) *ServerSocket {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &PicobusSocket{
+	return &ServerSocket{
 		path:   path,
 		ctx:    ctx,
 		cancel: cancel,
@@ -35,7 +35,7 @@ func NewPicobusSocket(path string) *PicobusSocket {
 
 // ListenAndServe starts listening on the Unix domain socket
 // and serves incoming connections using the specified handler.
-func (s *PicobusSocket) ListenAndServe(connQueue chan *Connection) error {
+func (s *ServerSocket) ListenAndServe(connQueue chan *Connection) error {
 	// Unbind any existing socket file
 	unlink(s.path)
 
@@ -69,7 +69,7 @@ func (s *PicobusSocket) ListenAndServe(connQueue chan *Connection) error {
 	}
 }
 
-func (s *PicobusSocket) Close(gracefulTimeout time.Duration) error {
+func (s *ServerSocket) Close(gracefulTimeout time.Duration) error {
 	// Cancel our context to signal handlers to stop and
 	s.cancel()
 

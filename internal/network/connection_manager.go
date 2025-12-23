@@ -10,7 +10,7 @@ import (
 )
 
 type ConnectionManager struct {
-	serverSocket           *PicobusSocket
+	serverSocket           *ServerSocket
 	protocolMessageFactory *protocol.MessageCodec
 
 	connectionMap          sync.Map // map[string]*Connection
@@ -19,7 +19,7 @@ type ConnectionManager struct {
 }
 
 func NewConnectionManager(
-	serverSocket *PicobusSocket,
+	serverSocket *ServerSocket,
 	protocolMessageFactory *protocol.MessageCodec,
 	backlogSize int,
 	inboundProtocolQueue chan protocol.Message,
